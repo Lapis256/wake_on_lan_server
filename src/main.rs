@@ -6,8 +6,17 @@ use wol::{MacAddr, send_wol};
 
 #[derive(Debug, Clone, Deserialize)]
 struct Config {
+    port: u16,
+
     #[serde(deserialize_with = "deserialize_devices")]
     devices: HashMap<String, MacAddr>,
+}
+
+impl Config {
+    fn load() -> Result<Self, String> {
+        let config_str = read_to_string("config.toml").map_err(|e| format!("Failed to read config.toml: {e}"))?;
+        toml::from_str(&config_str).map_err(|e| format!("Failed to parse config.toml: {e}"))
+    }
 }
 
 fn validate_device_name(name: &str) -> Result<(), String> {
@@ -49,7 +58,7 @@ async fn wake_on_lan(device_name: web::Path<String>, config: web::Data<Config>) 
         .ok_or_else(|| actix_web::error::ErrorNotFound(format!("No such device: {device_name}")))?;
 
     send_wol(*mac_addr, None, None)
-        .map_err(|e| actix_web::error::ErrorInternalServerError(format!("Failed to send WOL packet: {}", e)))?;
+        .map_err(|e| actix_web::error::ErrorInternalServerError(format!("Failed to send WOL packet: {e}")))?;
 
     Ok(format!("Waking up device: {device_name} (Mac Address: {mac_addr})"))
 }
@@ -58,25 +67,20 @@ async fn wake_on_lan(device_name: web::Path<String>, config: web::Data<Config>) 
 async fn main() -> std::io::Result<()> {
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
-    log::info!("starting HTTP server at http://localhost:8080");
+    let config = Config::load().unwrap_or_else(|e| panic!("Failed to parse config.toml: {}", e));
+    let port = config.port;
 
-    HttpServer::new(|| {
-        let config = read_to_string("config.toml").expect("Failed to read config.toml");
-        let config = match toml::from_str::<Config>(&config) {
-            Ok(config) => config,
-            Err(e) => {
-                panic!("Failed to parse config.toml: {}", e);
-            }
-        };
+    log::info!("starting HTTP server at http://localhost:{port}");
 
+    HttpServer::new(move || {
         App::new()
-            .app_data(web::Data::new(config))
+            .app_data(web::Data::new(config.clone()))
             .wrap(middleware::Logger::default())
             .service(wake_on_lan)
             .default_service(web::to(|| async { "Not Found" }))
     })
     .workers(2)
-    .bind(("0.0.0.0", 8888))?
+    .bind(("0.0.0.0", port))?
     .run()
     .await
 }
