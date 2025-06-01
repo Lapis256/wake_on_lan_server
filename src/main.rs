@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fs::read_to_string, str::FromStr};
 
-use actix_web::{App, Error, HttpServer, Responder, middleware, post, web};
+use actix_web::{App, Error, HttpServer, Responder, error, middleware, post, web};
 use serde::{Deserialize, Deserializer};
 use wol::{MacAddr, send_wol};
 
@@ -55,12 +55,12 @@ async fn wake_on_lan(device_name: web::Path<String>, config: web::Data<Config>) 
     let mac_addr = config
         .devices
         .get(device_name.as_str())
-        .ok_or_else(|| actix_web::error::ErrorNotFound(format!("No such device: {device_name}")))?;
+        .ok_or_else(|| error::ErrorNotFound(format!("No such device: {device_name}\n")))?;
 
     send_wol(*mac_addr, None, None)
-        .map_err(|e| actix_web::error::ErrorInternalServerError(format!("Failed to send WOL packet: {e}")))?;
+        .map_err(|e| error::ErrorInternalServerError(format!("Failed to send WOL packet: {e}\n")))?;
 
-    Ok(format!("Waking up device: {device_name} (Mac Address: {mac_addr})"))
+    Ok(format!("Waking up device: {device_name} (Mac Address: {mac_addr})\n"))
 }
 
 #[tokio::main]
