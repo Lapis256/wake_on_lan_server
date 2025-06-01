@@ -1,0 +1,3 @@
+[devices]
+desktop = "00-00-00-00-00-00"
+server = "FF:FF:FF:FF:FF:FF"
